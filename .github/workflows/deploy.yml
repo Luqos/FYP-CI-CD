@@ -63,15 +63,7 @@ jobs:
         working-directory: infra/terraform
         run: terraform init
 
-      # ── Step 5b: Import existing resources (from previous deploys) ─
-      - name: Import existing CloudWatch log groups
-        working-directory: infra/terraform
-        continue-on-error: true
-        run: |
-          terraform import aws_cloudwatch_log_group.ingest_sensor_data /aws/lambda/smart-parking-fyp-ingest-sensor-data || true
-          terraform import aws_cloudwatch_log_group.dashboard_api /aws/lambda/smart-parking-fyp-dashboard-api || true
-
-      # ── Step 5c: Terraform Apply ───────────────────────────────────
+      # ── Step 5b: Terraform Apply ───────────────────────────────────
       - name: Terraform Apply
         working-directory: infra/terraform
         env:
