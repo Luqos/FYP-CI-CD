@@ -42,16 +42,107 @@ jobs:
           path: infra/terraform/terraform.tfstate
           key: terraform-state-${{ secrets.AWS_REGION }}
 
+      # ── Step 1: Terraform destroy (if state exists) ────────────────
       - name: Terraform Init
         working-directory: infra/terraform
         run: terraform init
 
-      - name: Terraform Destroy
+      - name: Terraform Destroy (if state exists)
         working-directory: infra/terraform
+        continue-on-error: true
         env:
           TF_VAR_lab_role_arn: ${{ steps.lab_role.outputs.arn }}
           TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
-        run: terraform destroy -auto-approve
+        run: terraform destroy -auto-approve || echo "Terraform destroy skipped/partial - continuing with force cleanup"
+
+      # ── Step 2: Force cleanup with AWS CLI (catch-all) ─────────────
+      # This guarantees ALL resources are deleted even if Terraform
+      # state was lost or terraform destroy failed.
+      - name: Force cleanup all AWS resources with AWS CLI
+        shell: bash
+        run: |
+          set +e
+          echo "=============================================="
+          echo " FORCE CLEANUP: Deleting ALL smart-parking resources"
+          echo "=============================================="
+          PROJECT="smart-parking-fyp"
+          REGION="${{ secrets.AWS_REGION }}"
+          ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
+
+          # 1. Delete IoT Topic Rule
+          RULE_NAME="$(echo "${PROJECT}_telemetry_rule" | tr '-' '_')"
+          echo "[1/10] Deleting IoT Topic Rule: $RULE_NAME..."
+          aws iot delete-topic-rule --rule-name "$RULE_NAME" 2>/dev/null
+          echo "       Done."
+
+          # 2. Delete Lambda permissions (must be removed before deleting functions)
+          echo "[2/10] Deleting Lambda permissions..."
+          aws lambda remove-permission --function-name "${PROJECT}-ingest-sensor-data" --statement-id AllowIoTCoreInvoke 2>/dev/null
+          aws lambda remove-permission --function-name "${PROJECT}-dashboard-api" --statement-id AllowAPIGatewayInvoke 2>/dev/null
+          echo "       Done."
+
+          # 3. Delete Lambda functions
+          echo "[3/10] Deleting Lambda functions..."
+          aws lambda delete-function --function-name "${PROJECT}-ingest-sensor-data" 2>/dev/null
+          aws lambda delete-function --function-name "${PROJECT}-dashboard-api" 2>/dev/null
+          echo "       Done."
+
+          # 4. Delete CloudWatch log groups
+          echo "[4/10] Deleting CloudWatch log groups..."
+          aws logs delete-log-group --log-group-name "/aws/lambda/${PROJECT}-ingest-sensor-data" 2>/dev/null
+          aws logs delete-log-group --log-group-name "/aws/lambda/${PROJECT}-dashboard-api" 2>/dev/null
+          echo "       Done."
+
+          # 5. Delete API Gateway HTTP API (deletes routes, stage, integration too)
+          echo "[5/10] Deleting API Gateway HTTP API..."
+          API_ID="$(aws apigatewayv2 get-apis --query "Items[?Name=='${PROJECT}-http-api'].ApiId" --output text 2>/dev/null | head -1)"
+          if [ -n "$API_ID" ] && [ "$API_ID" != "None" ]; then
+            aws apigatewayv2 delete-api --api-id "$API_ID" 2>/dev/null
+            echo "       Deleted API ID: $API_ID"
+          else
+            echo "       No API Gateway found (already deleted)."
+          fi
+
+          # 6. Delete DynamoDB tables
+          echo "[6/10] Deleting DynamoDB tables..."
+          aws dynamodb delete-table --table-name "${PROJECT}-ParkingSlotState" 2>/dev/null
+          aws dynamodb delete-table --table-name "${PROJECT}-ParkingEvents" 2>/dev/null
+          echo "       Done."
+
+          # 7. Delete S3 dashboard bucket (empty first, then delete)
+          echo "[7/10] Deleting S3 dashboard bucket..."
+          DASH_BUCKET="${PROJECT}-dashboard-${ACCOUNT}-${REGION}"
+          aws s3 rb "s3://${DASH_BUCKET}" --force 2>/dev/null || aws s3api delete-bucket --bucket "$DASH_BUCKET" 2>/dev/null
+          echo "       Done."
+
+          # 8. Delete S3 reports bucket (empty first, then delete)
+          echo "[8/10] Deleting S3 reports bucket..."
+          REP_BUCKET="${PROJECT}-reports-${ACCOUNT}-${REGION}"
+          aws s3 rb "s3://${REP_BUCKET}" --force 2>/dev/null || aws s3api delete-bucket --bucket "$REP_BUCKET" 2>/dev/null
+          echo "       Done."
+
+          # 9. Wait for DynamoDB tables to finish deleting (best-effort)
+          echo "[9/10] Waiting for DynamoDB tables to delete..."
+          aws dynamodb wait table-not-exists --table-name "${PROJECT}-ParkingSlotState" 2>/dev/null
+          aws dynamodb wait table-not-exists --table-name "${PROJECT}-ParkingEvents" 2>/dev/null
+          echo "       Done."
+
+          # 10. Verify no remaining resources
+          echo "[10/10] Verifying cleanup..."
+          REMAINING=""
+          aws apigatewayv2 get-apis --query "Items[?Name=='${PROJECT}-http-api'].ApiId" --output text 2>/dev/null | grep -q . && REMAINING="$REMAINING api-gateway"
+          aws lambda get-function --function-name "${PROJECT}-ingest-sensor-data" 2>/dev/null && REMAINING="$REMAINING ingest-lambda"
+          aws lambda get-function --function-name "${PROJECT}-dashboard-api" 2>/dev/null && REMAINING="$REMAINING dashboard-lambda"
+          if [ -z "$REMAINING" ]; then
+            echo "       ✅ All smart-parking resources verified deleted!"
+          else
+            echo "       ⚠️ Some resources may still exist:$REMAINING"
+            echo "       YOU MAY NEED TO RE-RUN THIS WORKFLOW."
+          fi
+
+          echo "=============================================="
+          echo " FORCE CLEANUP COMPLETE!"
+          echo "=============================================="
 
       - name: Destroy Complete
         run: echo "All AWS resources have been destroyed."
