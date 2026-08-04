@@ -1,0 +1,117 @@
+name: CD - Deploy to AWS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'infra/**'
+      - 'scripts/**'
+  workflow_dispatch:  # Allow manual trigger from Actions tab
+
+jobs:
+  deploy:
+    name: Deploy Smart Parking Stack to AWS
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.5.0'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # ── Step 1: Verify AWS identity ────────────────────────────────
+      - name: Check AWS identity
+        run: bash scripts/check_aws_identity.sh
+
+      # ── Step 2: Detect LabRole / VocLabs ───────────────────────────
+      - name: Detect LabRole ARN
+        id: lab_role
+        run: echo "arn=$(bash scripts/find_lab_role.sh)" >> "$GITHUB_OUTPUT"
+
+      # ── Step 3: Package Lambda zips ────────────────────────────────
+      - name: Package Lambda functions
+        run: bash scripts/package_lambdas.sh
+
+      # ── Step 4: Restore Terraform state (persist between runs) ─────
+      - name: Restore Terraform state
+        uses: actions/cache@v4
+        with:
+          path: infra/terraform/terraform.tfstate
+          key: terraform-state-${{ secrets.AWS_REGION }}
+
+      # ── Step 5: Terraform Init + Apply ─────────────────────────────
+      - name: Terraform Init
+        working-directory: infra/terraform
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: infra/terraform
+        env:
+          TF_VAR_lab_role_arn: ${{ steps.lab_role.outputs.arn }}
+          TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
+        run: terraform apply -auto-approve
+
+      # ── Step 6: Save Terraform state for next run ──────────────────
+      - name: Save Terraform state
+        uses: actions/cache/save@v4
+        with:
+          path: infra/terraform/terraform.tfstate
+          key: terraform-state-${{ secrets.AWS_REGION }}
+
+      # ── Step 7: Read outputs ───────────────────────────────────────
+      - name: Read Terraform outputs
+        working-directory: infra/terraform
+        id: tf_outputs
+        run: |
+          echo "DASHBOARD_BUCKET=$(terraform output -raw dashboard_bucket_name)" >> "$GITHUB_OUTPUT"
+          echo "API_URL=$(terraform output -raw api_gateway_url)" >> "$GITHUB_OUTPUT"
+          echo "DASHBOARD_URL=$(terraform output -raw dashboard_url)" >> "$GITHUB_OUTPUT"
+
+      # ── Step 8: Generate frontend config.js ────────────────────────
+      - name: Generate frontend config.js
+        run: |
+          mkdir -p frontend
+          echo "window.SMART_PARKING_CONFIG = {" > frontend/config.js
+          echo "  API_BASE_URL: \"${{ steps.tf_outputs.outputs.API_URL }}\"" >> frontend/config.js
+          echo "};" >> frontend/config.js
+
+      # ── Step 9: Upload dashboard to S3 ─────────────────────────────
+      - name: Upload frontend to S3 dashboard bucket
+        run: |
+          aws s3 cp frontend/index.html "s3://${{ steps.tf_outputs.outputs.DASHBOARD_BUCKET }}/index.html"
+          aws s3 cp frontend/style.css  "s3://${{ steps.tf_outputs.outputs.DASHBOARD_BUCKET }}/style.css"
+          aws s3 cp frontend/app.js     "s3://${{ steps.tf_outputs.outputs.DASHBOARD_BUCKET }}/app.js"
+          aws s3 cp frontend/config.js  "s3://${{ steps.tf_outputs.outputs.DASHBOARD_BUCKET }}/config.js"
+
+      # ── Step 10: Invalidate CloudFront cache (if CloudFront is used later) ──
+      # (Optional - uncomment when CloudFront is added)
+      # - name: Invalidate CloudFront
+      #   run: aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DIST_ID }} --paths "/*"
+
+      # ── Step 11: Summary ────────────────────────────────────────────
+      - name: Deployment Summary
+        run: |
+          echo "=============================================="
+          echo " DEPLOYMENT COMPLETE!"
+          echo "=============================================="
+          echo " Dashboard URL : ${{ steps.tf_outputs.outputs.DASHBOARD_URL }}"
+          echo " API Gateway   : ${{ steps.tf_outputs.outputs.API_URL }}"
+          echo "=============================================="

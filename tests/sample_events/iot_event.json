@@ -1,0 +1,8 @@
+{
+  "slotId": "A01",
+  "distanceCm": 14.2,
+  "status": "OCCUPIED",
+  "confidence": 0.91,
+  "mqttTopic": "smart-parking/slot/A01/telemetry",
+  "deviceId": "esp32-A01"
+}

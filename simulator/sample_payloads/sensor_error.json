@@ -1,0 +1,8 @@
+{
+  "slotId": "A02",
+  "distanceCm": 999.0,
+  "status": "SENSOR_ERROR",
+  "confidence": 0.0,
+  "deviceId": "sim-A02",
+  "firmwareVersion": "0.1.0"
+}

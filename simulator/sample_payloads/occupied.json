@@ -1,0 +1,8 @@
+{
+  "slotId": "A01",
+  "distanceCm": 14.2,
+  "status": "OCCUPIED",
+  "confidence": 0.91,
+  "deviceId": "sim-A01",
+  "firmwareVersion": "0.1.0"
+}

@@ -1,0 +1,89 @@
+name: CI - Test, Package & Plan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Job 1: Run unit tests ─────────────────────────────────────────
+  test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Run all unit tests
+        run: python -m unittest discover -s tests -v
+
+  # ── Job 2: Package Lambda zips (build artifacts) ─────────────────
+  package:
+    name: Package Lambda Functions
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Package Lambda ZIPs
+        run: bash scripts/package_lambdas.sh
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-packages
+          path: build/
+          retention-days: 7
+
+  # ── Job 3: Terraform Plan (preview infra changes, no apply) ──────
+  terraform-plan:
+    name: Terraform Plan
+    needs: package
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download packaged Lambdas
+        uses: actions/download-artifact@v4
+        with:
+          name: lambda-packages
+          path: build/
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.5.0'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Detect LabRole ARN
+        id: lab_role
+        run: echo "arn=$(bash scripts/find_lab_role.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Terraform state
+        uses: actions/cache@v4
+        with:
+          path: infra/terraform/terraform.tfstate
+          key: terraform-state-${{ secrets.AWS_REGION }}
+
+      - name: Terraform Init
+        working-directory: infra/terraform
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: infra/terraform
+        run: terraform plan -var="lab_role_arn=${{ steps.lab_role.outputs.arn }}" -var="aws_region=${{ secrets.AWS_REGION }}"

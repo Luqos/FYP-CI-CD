@@ -1,0 +1,1180 @@
+COMPLETE CREATION AND TESTING GUIDE
+AWS ACADEMY SMART PARKING IOT PROTOTYPE
+
+Purpose
+=======
+
+This runbook explains how to create, validate, deploy, test, demonstrate, and
+clean up the project specified in fyp.md.
+
+Important workspace rule:
+
+- Do not access, edit, move, or delete anything inside the Documentation folder.
+- Create the generated repository as:
+
+  C:\Users\Luqos\Documents\UTeM\PSM 1\smart-parking-aws-academy
+
+- Keep fyp.md as the source specification.
+
+This guide assumes:
+
+- Host operating system: Windows
+- Deployment shell: Git Bash
+- AWS environment: AWS Academy Learner Lab
+- Recommended AWS region: us-east-1
+- Initial testing method: AWS CLI simulator before ESP32 hardware
+
+
+PHASE 1 - UNDERSTAND THE END RESULT
+===================================
+
+The finished system must perform this complete flow:
+
+1. ESP32 or simulator publishes distance telemetry.
+2. AWS IoT Core receives the MQTT message.
+3. An IoT Topic Rule invokes the ingestion Lambda.
+4. The ingestion Lambda validates the reading.
+5. DynamoDB stores the current slot state and historical events.
+6. API Gateway HTTP API invokes the dashboard API Lambda.
+7. The S3 static website dashboard reads data from API Gateway.
+8. The dashboard API creates daily CSV reports in the private reports bucket.
+9. CloudWatch stores Lambda logs.
+10. Terraform and the cleanup script can destroy the deployed resources.
+
+The project is not complete if the dashboard only runs locally.
+
+
+PHASE 2 - PREPARE THE COMPUTER
+==============================
+
+2.1 Current machine status
+--------------------------
+
+At the time this guide was created:
+
+- Git is installed.
+- Git Bash is installed at C:\Program Files\Git\bin\bash.exe.
+- A Python 3.11 interpreter exists, but it does not include pip.
+- AWS CLI is not installed.
+- Terraform is not installed.
+- Arduino IDE is not installed.
+
+Install a normal user-accessible Python distribution with pip. Do not depend on
+the existing internal Python environment.
+
+
+2.2 Install required software
+-----------------------------
+
+Open PowerShell as a normal user. Use winget:
+
+  winget install --id Amazon.AWSCLI --exact
+  winget install --id Hashicorp.Terraform --exact
+  winget install --id Python.Python.3.12 --exact
+
+Arduino IDE is not required for the initial cloud and simulator deployment.
+Install it before physical ESP32 testing:
+
+  winget install --id ArduinoSA.IDE.stable --exact
+
+If a winget package ID is unavailable, use the official installers:
+
+- AWS CLI:
+  https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
+- Terraform:
+  https://developer.hashicorp.com/terraform/install
+- Python for Windows:
+  https://www.python.org/downloads/windows/
+- Arduino IDE:
+  https://www.arduino.cc/en/software
+
+Close all terminals after installation and open a new PowerShell window so PATH
+changes are loaded.
+
+
+2.3 Verify required software
+----------------------------
+
+Run in PowerShell:
+
+  aws --version
+  terraform version
+  python --version
+  python -m pip --version
+  git --version
+  & "C:\Program Files\Git\bin\bash.exe" --version
+
+Required results:
+
+- aws reports AWS CLI version 2.
+- terraform reports an installed Terraform version.
+- python reports Python 3.10 or newer.
+- python -m pip succeeds.
+- git succeeds.
+- Git Bash succeeds.
+
+Stop here and fix installation problems if any required command fails.
+
+
+PHASE 3 - PREPARE AWS ACADEMY
+=============================
+
+3.1 Start the lab
+-----------------
+
+1. Sign in to AWS Academy.
+2. Open the Learner Lab.
+3. Start the lab.
+4. Wait until the AWS indicator shows that the lab is ready.
+5. Open AWS Details or the equivalent credentials panel.
+6. Display the AWS CLI credentials.
+
+AWS Academy credentials are temporary. They normally contain:
+
+- aws_access_key_id
+- aws_secret_access_key
+- aws_session_token
+
+The session token is required. Credentials expire when the lab session expires
+or is reset.
+
+
+3.2 Configure temporary AWS credentials on Windows
+--------------------------------------------------
+
+In PowerShell:
+
+  New-Item -ItemType Directory -Force "$HOME\.aws"
+  notepad "$HOME\.aws\credentials"
+
+Paste the complete AWS Academy credentials block exactly as provided. It should
+look similar to this:
+
+  [default]
+  aws_access_key_id=TEMPORARY_VALUE
+  aws_secret_access_key=TEMPORARY_VALUE
+  aws_session_token=TEMPORARY_VALUE
+
+Do not put these credentials in the project repository.
+Do not put them in fyp.md.
+Do not commit them to Git.
+
+Set the region and output format:
+
+  aws configure set region us-east-1
+  aws configure set output json
+
+
+3.3 Verify AWS identity and region
+----------------------------------
+
+Run:
+
+  aws sts get-caller-identity
+  aws configure get region
+  aws iot describe-endpoint --endpoint-type iot:Data-ATS
+
+Required results:
+
+- get-caller-identity returns the AWS Academy account and ARN.
+- region returns us-east-1, or the region selected for the project.
+- describe-endpoint returns an AWS IoT data endpoint.
+
+If get-caller-identity reports ExpiredToken, refresh the credentials from the
+currently running Learner Lab.
+
+
+3.4 Find the AWS Academy Lambda execution role
+-----------------------------------------------
+
+Run:
+
+  aws iam get-role --role-name LabRole --query "Role.Arn" --output text
+
+If that fails or returns no role, run:
+
+  aws iam get-role --role-name VocLabs --query "Role.Arn" --output text
+
+Save the returned role ARN. It should resemble:
+
+  arn:aws:iam::123456789012:role/LabRole
+
+If both commands return AccessDenied, inspect the AWS Academy console for the
+existing LabRole or VocLabs role ARN. Do not create a new administrator role.
+
+
+3.5 Understand the AWS Academy permission risk
+-----------------------------------------------
+
+The project requires permission to create or configure:
+
+- Lambda functions using LabRole or VocLabs
+- iam:PassRole for that existing role
+- DynamoDB tables
+- S3 buckets and static website configuration
+- Public-read object policy for the dashboard bucket only
+- S3 public-access-block settings for the dashboard bucket
+- API Gateway HTTP API
+- AWS IoT Topic Rule
+- Lambda invoke permissions
+- CloudWatch log groups
+
+AWS Academy may block one or more of these operations. The generated deployment
+must fail clearly when a required permission is blocked. Do not silently replace
+the official S3 dashboard with local hosting.
+
+
+PHASE 4 - CREATE THE PROJECT REPOSITORY
+=======================================
+
+4.1 Give the creation instruction
+---------------------------------
+
+From this workspace, instruct Codex or the coding agent with:
+
+  Read fyp.md completely and create the full smart-parking-aws-academy
+  repository described by it. Implement all backend, frontend, Terraform,
+  scripts, simulator, firmware, tests, and documentation. Run local tests and
+  validation. Do not access or modify the Documentation folder.
+
+The agent must create:
+
+  C:\Users\Luqos\Documents\UTeM\PSM 1\smart-parking-aws-academy
+
+Do not ask the agent to write generated project files into Documentation.
+
+
+4.2 Confirm the repository structure
+------------------------------------
+
+Open Git Bash:
+
+  cd "/c/Users/Luqos/Documents/UTeM/PSM 1"
+  cd smart-parking-aws-academy
+  find . -maxdepth 3 -type f | sort
+
+At minimum, verify the presence of:
+
+  README.md
+  ARCHITECTURE.md
+  AWS_ACADEMY_DEPLOYMENT_GUIDE.md
+  backend/ingest_sensor_data/app.py
+  backend/dashboard_api/app.py
+  backend/shared/parking_logic.py
+  backend/shared/ingestion_service.py
+  frontend/index.html
+  frontend/app.js
+  frontend/style.css
+  frontend/config.js.example
+  infra/terraform/main.tf
+  infra/terraform/variables.tf
+  infra/terraform/outputs.tf
+  scripts/deploy.sh
+  scripts/destroy.sh
+  scripts/package_lambdas.sh
+  scripts/publish_sample_aws_cli.sh
+  simulator/publish_sequence_aws_cli.py
+  tests/test_parking_logic.py
+  tests/test_ingestion_service.py
+  tests/test_dashboard_api.py
+
+Also confirm that no real credentials, private keys, or certificates exist in
+the repository.
+
+
+4.3 Initialize Git after generation
+-----------------------------------
+
+Run from the generated repository:
+
+  git init
+  git status --short
+
+Inspect .gitignore before the first commit. It must ignore at least:
+
+  secrets.h
+  certs/
+  *.pem
+  *.key
+  *.crt
+  frontend/config.js
+  .terraform/
+  *.tfstate
+  *.tfstate.*
+  .venv/
+  __pycache__/
+  *.zip
+
+Do not commit until local checks pass.
+
+
+PHASE 5 - CREATE THE LOCAL PYTHON ENVIRONMENT
+=============================================
+
+Use Git Bash from the generated repository:
+
+  cd "/c/Users/Luqos/Documents/UTeM/PSM 1/smart-parking-aws-academy"
+  python -m venv .venv
+  source .venv/Scripts/activate
+  python -m pip install --upgrade pip
+
+Install dependencies declared by the repository:
+
+  python -m pip install -r backend/ingest_sensor_data/requirements.txt
+  python -m pip install -r backend/dashboard_api/requirements.txt
+  python -m pip install pytest boto3
+
+Install paho-mqtt only for certificate-based MQTT simulator testing:
+
+  python -m pip install paho-mqtt
+
+If the generated tests declare additional test dependencies, install them from
+the generated test requirements or README. Prefer unittest.mock for AWS clients
+unless the generated repository intentionally uses another mocking library.
+
+
+PHASE 6 - RUN LOCAL QUALITY CHECKS
+==================================
+
+6.1 Python tests
+----------------
+
+Run:
+
+  pytest -q
+
+Required coverage includes:
+
+- Distance boundaries at 2 cm, 30 cm, and 400 cm.
+- Missing, non-numeric, below-range, and above-range distance.
+- Confidence validation and calculation.
+- Billing at 5, 15, and 61 minutes.
+- Session start and repeated occupied reading.
+- Sensor error during an active session.
+- Recovery from sensor error to available.
+- Session completion and billing.
+- Maintenance cancellation and maintenance lock.
+- Collision-safe event keys.
+- DynamoDB Decimal conversion.
+- /ingest-test route.
+- Stale/offline presentation.
+- Events, admin, and daily report routes.
+
+All tests must pass before deployment.
+
+
+6.2 Python syntax and import checks
+-----------------------------------
+
+Run:
+
+  python -m compileall backend simulator tests
+
+Required result:
+
+- No syntax errors.
+
+
+6.3 Shell script syntax checks
+------------------------------
+
+Run:
+
+  bash -n scripts/*.sh
+
+Required result:
+
+- No shell syntax errors.
+
+Ensure scripts are executable:
+
+  chmod +x scripts/*.sh
+
+
+6.4 Package the Lambda functions
+--------------------------------
+
+Run:
+
+  ./scripts/package_lambdas.sh
+
+Inspect both generated zip files:
+
+  unzip -l build/ingest_sensor_data.zip
+  unzip -l build/dashboard_api.zip
+
+Adjust the zip paths if the generated script uses a different build directory.
+
+Required result:
+
+- Each Lambda package contains its handler.
+- Each package can import parking_logic.py and ingestion_service.py.
+- No credentials or certificates are inside either zip.
+
+
+6.5 Terraform formatting and validation
+---------------------------------------
+
+Run:
+
+  terraform -chdir=infra/terraform fmt -check -recursive
+  terraform -chdir=infra/terraform init -backend=false
+  terraform -chdir=infra/terraform validate
+
+Required result:
+
+- Formatting check passes.
+- Provider initialization succeeds.
+- Terraform validation succeeds.
+
+If validation fails because Lambda zip files are missing, run
+scripts/package_lambdas.sh again and verify the expected package paths.
+
+
+6.6 Inspect the Terraform plan before deployment
+------------------------------------------------
+
+Set the role ARN returned earlier:
+
+  export LAB_ROLE_ARN="arn:aws:iam::ACCOUNT_ID:role/LabRole"
+
+Run:
+
+  terraform -chdir=infra/terraform plan \
+    -var="lab_role_arn=${LAB_ROLE_ARN}" \
+    -var="enable_pitr=false"
+
+Inspect the plan carefully.
+
+Expected resources include:
+
+- Two DynamoDB tables.
+- Dashboard S3 bucket.
+- Private reports S3 bucket.
+- Two Lambda functions.
+- CloudWatch log groups.
+- API Gateway HTTP API and routes.
+- AWS IoT Topic Rule.
+- Lambda permissions.
+
+Stop if the plan proposes unrelated or expensive resources such as EC2, RDS,
+CloudFront, Route 53, Cognito, ECS, EKS, or OpenSearch.
+
+
+PHASE 7 - DEPLOY TO AWS ACADEMY
+===============================
+
+7.1 Refresh credentials immediately before deployment
+------------------------------------------------------
+
+AWS Academy sessions expire. Before deployment:
+
+  aws sts get-caller-identity
+
+If this fails, replace the contents of the AWS credentials file with fresh
+Learner Lab credentials.
+
+
+7.2 Run project preflight scripts
+---------------------------------
+
+From Git Bash:
+
+  ./scripts/check_aws_identity.sh
+  ./scripts/find_lab_role.sh
+
+Confirm the reported account, region, and role ARN are correct.
+
+
+7.3 Run the deployment script
+-----------------------------
+
+Run:
+
+  ./scripts/deploy.sh
+
+The script should:
+
+1. Verify AWS identity.
+2. Detect the region.
+3. Detect or request the LabRole/VocLabs ARN.
+4. Package both Lambdas.
+5. Run Terraform init, plan, and apply.
+6. Read Terraform outputs.
+7. Generate frontend/config.js.
+8. Upload index.html, style.css, app.js, and config.js.
+9. Print dashboard and API URLs.
+
+Do not continue if Terraform reports a failed resource creation. Read the exact
+AWS AccessDenied message and use the troubleshooting section of this guide.
+
+
+7.4 Save deployment outputs
+---------------------------
+
+Run:
+
+  ./scripts/get_outputs.sh
+
+Also load useful outputs into Git Bash variables:
+
+  API_URL=$(terraform -chdir=infra/terraform output -raw api_gateway_url)
+  DASHBOARD_URL=$(terraform -chdir=infra/terraform output -raw dashboard_url)
+  DASHBOARD_BUCKET=$(terraform -chdir=infra/terraform output -raw dashboard_bucket_name)
+  REPORTS_BUCKET=$(terraform -chdir=infra/terraform output -raw reports_bucket_name)
+  SLOT_TABLE=$(terraform -chdir=infra/terraform output -raw slot_state_table_name)
+  EVENTS_TABLE=$(terraform -chdir=infra/terraform output -raw events_table_name)
+  INGEST_LAMBDA=$(terraform -chdir=infra/terraform output -raw ingest_lambda_name)
+  API_LAMBDA=$(terraform -chdir=infra/terraform output -raw dashboard_api_lambda_name)
+
+Print them:
+
+  printf "API_URL=%s\nDASHBOARD_URL=%s\n" "$API_URL" "$DASHBOARD_URL"
+
+
+PHASE 8 - TEST THE DEPLOYED API
+===============================
+
+8.1 Health endpoint
+-------------------
+
+Run:
+
+  curl -sS "$API_URL/health"
+
+Expected result:
+
+- HTTP success response.
+- JSON indicating that the API is healthy.
+
+
+8.2 Test direct fallback ingestion
+----------------------------------
+
+This verifies the shared ingestion behavior even if AWS IoT Rule creation is
+blocked.
+
+Publish an available reading:
+
+  curl -sS -X POST "$API_URL/ingest-test" \
+    -H "Content-Type: application/json" \
+    -d '{"slotId":"A01","distanceCm":80,"deviceId":"api-test-A01"}'
+
+Publish an occupied reading:
+
+  curl -sS -X POST "$API_URL/ingest-test" \
+    -H "Content-Type: application/json" \
+    -d '{"slotId":"A01","distanceCm":14.2,"deviceId":"api-test-A01"}'
+
+Publish a sensor error:
+
+  curl -sS -X POST "$API_URL/ingest-test" \
+    -H "Content-Type: application/json" \
+    -d '{"slotId":"A02","distanceCm":999,"deviceId":"api-test-A02"}'
+
+Expected results:
+
+- A01 changes from AVAILABLE to OCCUPIED.
+- A02 becomes SENSOR_ERROR.
+- Responses contain useful JSON rather than internal stack traces.
+
+
+8.3 Test slot endpoints
+-----------------------
+
+Run:
+
+  curl -sS "$API_URL/slots"
+  curl -sS "$API_URL/slots/A01"
+  curl -sS "$API_URL/events?slotId=A01&limit=20"
+
+Expected results:
+
+- /slots contains the summary and slot records.
+- /slots/A01 returns A01.
+- /events returns the first-reading and status-change events.
+
+
+8.4 Test input validation
+-------------------------
+
+Run:
+
+  curl -i -X POST "$API_URL/ingest-test" \
+    -H "Content-Type: application/json" \
+    -d '{"slotId":"bad slot id!","distanceCm":20}'
+
+  curl -i "$API_URL/events?slotId=A01&limit=999"
+
+Expected result:
+
+- Both invalid requests return HTTP 400 with clear messages.
+
+
+8.5 Test maintenance behavior
+-----------------------------
+
+Set maintenance:
+
+  curl -sS -X POST "$API_URL/admin/slot/A01/maintenance"
+
+Send normal telemetry while maintenance is active:
+
+  curl -sS -X POST "$API_URL/ingest-test" \
+    -H "Content-Type: application/json" \
+    -d '{"slotId":"A01","distanceCm":80,"deviceId":"api-test-A01"}'
+
+Read the slot:
+
+  curl -sS "$API_URL/slots/A01"
+
+Expected result:
+
+- A01 remains MAINTENANCE even after the normal sensor reading.
+- Latest sensor values and last-seen time can still update.
+
+Clear maintenance:
+
+  curl -sS -X POST "$API_URL/admin/slot/A01/available"
+  curl -sS "$API_URL/slots/A01"
+
+Expected result:
+
+- A01 becomes AVAILABLE.
+- ADMIN_OVERRIDE events exist.
+
+
+8.6 Test stale/offline behavior
+-------------------------------
+
+Publish a current reading to A03:
+
+  curl -sS -X POST "$API_URL/ingest-test" \
+    -H "Content-Type: application/json" \
+    -d '{"slotId":"A03","distanceCm":80,"deviceId":"api-test-A03"}'
+
+Wait at least 65 seconds without publishing to A03:
+
+  sleep 65
+  curl -sS "$API_URL/slots/A03"
+
+Expected result:
+
+- sensorHealth is OFFLINE.
+- isStale is true.
+- Effective displayed status is OFFLINE.
+- DynamoDB still retains the last actual sensor status.
+
+
+PHASE 9 - TEST THE AWS IOT CORE FLOW
+====================================
+
+9.1 Publish sample readings through AWS IoT Core
+------------------------------------------------
+
+Run:
+
+  ./scripts/publish_sample_aws_cli.sh A01 14.2
+  ./scripts/publish_sample_aws_cli.sh A02 80
+  ./scripts/publish_sample_aws_cli.sh A03 999
+
+Expected flow:
+
+- AWS CLI publishes to AWS IoT Core.
+- The IoT Topic Rule matches smart-parking/slot/+/telemetry.
+- IoT Core invokes ingest_sensor_data.
+- DynamoDB updates.
+- CloudWatch receives ingestion logs.
+
+
+9.2 Verify the IoT rule
+-----------------------
+
+Run:
+
+  aws iot list-topic-rules
+
+Inspect the project rule in the AWS Console:
+
+1. Open AWS IoT Core.
+2. Open Message routing or Rules.
+3. Confirm the project rule exists.
+4. Confirm its SQL selects from smart-parking/slot/+/telemetry.
+5. Confirm it passes topic() as mqttTopic.
+6. Confirm the target is the ingestion Lambda.
+
+
+9.3 Verify state and events in DynamoDB
+---------------------------------------
+
+Run:
+
+  aws dynamodb scan --table-name "$SLOT_TABLE"
+  aws dynamodb scan --table-name "$EVENTS_TABLE"
+
+Expected result:
+
+- A01, A02, and A03 exist in the state table after publishing.
+- Event records have collision-safe eventKey values.
+- No repeated event is created for unchanged normal readings.
+- Decimal values are stored without float serialization errors.
+
+
+PHASE 10 - VERIFY CLOUDWATCH LOGS
+=================================
+
+Run:
+
+  aws logs tail "/aws/lambda/$INGEST_LAMBDA" --since 15m
+  aws logs tail "/aws/lambda/$API_LAMBDA" --since 15m
+
+Expected result:
+
+- Logs show successful invocations.
+- Logs show useful slot IDs and outcomes.
+- Logs do not expose credentials, certificates, or private keys.
+- No unhandled Decimal serialization, permission, import, or handler errors.
+
+Use the AWS Console to capture readable screenshots for the FYP evidence.
+
+
+PHASE 11 - TEST DAILY REPORT GENERATION
+=======================================
+
+Request a report for the current Kuala Lumpur date. Replace YYYY-MM-DD with the
+correct date:
+
+  curl -sS -X POST "$API_URL/reports/daily" \
+    -H "Content-Type: application/json" \
+    -d '{"date":"YYYY-MM-DD"}'
+
+Expected response:
+
+- date
+- recordCount
+- reports bucket name
+- S3 object key
+
+Verify the private S3 object:
+
+  aws s3 ls "s3://$REPORTS_BUCKET/daily/YYYY-MM-DD/"
+
+Download it for inspection:
+
+  aws s3 cp \
+    "s3://$REPORTS_BUCKET/daily/YYYY-MM-DD/parking-events.csv" \
+    "./parking-events-YYYY-MM-DD.csv"
+
+Open the CSV and verify these columns:
+
+  slotId
+  eventTime
+  eventType
+  previousStatus
+  newStatus
+  distanceCm
+  confidence
+  sessionId
+  durationMinutes
+  billingAmountRM
+
+Confirm the reports bucket is not public.
+
+
+PHASE 12 - TEST THE S3 DASHBOARD
+================================
+
+12.1 Confirm frontend files were uploaded
+-----------------------------------------
+
+Run:
+
+  aws s3 ls "s3://$DASHBOARD_BUCKET/"
+
+Required files:
+
+- index.html
+- style.css
+- app.js
+- config.js
+
+Check generated configuration:
+
+  aws s3 cp "s3://$DASHBOARD_BUCKET/config.js" -
+
+Expected result:
+
+- API_BASE_URL contains the deployed API Gateway URL.
+- It does not contain localhost.
+
+
+12.2 Open and verify the official dashboard
+-------------------------------------------
+
+Open the value printed in DASHBOARD_URL in a browser.
+
+The official URL must be the S3 static website URL, not a local file and not a
+localhost URL.
+
+Verify:
+
+- Slot cards load.
+- Available, occupied, offline, and sensor-error counters load.
+- Status labels are visually distinct.
+- Events table loads.
+- Last updated time changes.
+- Daily report button works.
+- Browser developer console has no CORS or JavaScript errors.
+
+The S3 website uses HTTP for this prototype. CloudFront is intentionally
+excluded.
+
+
+PHASE 13 - TEST BILLING LOGIC
+=============================
+
+The exact billing boundaries are best verified through unit tests because cloud
+ingestion uses authoritative Lambda receive time.
+
+Required unit-test expectations:
+
+- 5 minutes produces RM 0.00.
+- 15 minutes produces RM 2.00.
+- 61 minutes produces RM 4.00.
+
+For a live cloud demonstration:
+
+1. Publish AVAILABLE for a new slot.
+2. Publish OCCUPIED to start a session.
+3. Confirm currentSessionId and currentSessionStartedEpoch exist.
+4. Wait longer than 10 minutes.
+5. Publish AVAILABLE.
+6. Confirm the completion event contains durationMinutes and billingAmountRM.
+
+Do not falsify device timestamps to shorten the wait because Lambda receive time
+is authoritative by design.
+
+
+PHASE 14 - OPTIONAL ESP32 AND HC-SR04 TESTING
+=============================================
+
+Complete this phase only after simulator-based cloud testing passes.
+
+
+14.1 Required hardware
+----------------------
+
+- ESP32 development board
+- HC-SR04 ultrasonic sensor
+- Breadboard
+- Jumper wires
+- USB data cable
+- Resistors for a voltage divider on HC-SR04 ECHO
+- Wi-Fi with outbound internet access
+
+HC-SR04 ECHO outputs approximately 5V. ESP32 GPIO is 3.3V. Use a voltage divider
+between ECHO and GPIO 18. Do not connect the 5V ECHO output directly to ESP32.
+
+Expected project pin assignment:
+
+- HC-SR04 TRIG: GPIO 5
+- HC-SR04 ECHO through voltage divider: GPIO 18
+- Publish interval: 5 seconds
+- Slot topic: smart-parking/slot/A01/telemetry
+
+
+14.2 Install Arduino support
+----------------------------
+
+1. Install Arduino IDE.
+2. Add ESP32 board support in Arduino IDE.
+3. Install libraries required by the generated firmware, normally:
+   - PubSubClient
+   - ArduinoJson
+4. Open:
+
+   firmware/esp32_hcsr04_aws_iot/esp32_hcsr04_aws_iot.ino
+
+
+14.3 Create IoT Thing and certificate
+-------------------------------------
+
+Try the generated helper:
+
+  ./scripts/create_iot_thing_and_cert.sh
+
+The helper should create or guide creation of:
+
+- AWS IoT Thing
+- Device certificate
+- Private key
+- Restricted IoT policy
+- Policy and Thing certificate attachments
+
+If AWS Academy denies certificate creation, use the AWS IoT Core Console if
+permitted. The cloud project remains testable through AWS CLI publishing.
+
+Never commit:
+
+- Device private key
+- Device certificate
+- Amazon Root CA copy if project policy excludes it
+- secrets.h
+- certs directory
+
+
+14.4 Configure and flash firmware
+---------------------------------
+
+1. Copy secrets_template.h to secrets.h.
+2. Fill secrets.h with:
+   - Wi-Fi SSID
+   - Wi-Fi password
+   - AWS IoT data endpoint
+   - Amazon Root CA
+   - Device certificate
+   - Private key
+3. Confirm secrets.h is ignored by Git.
+4. Select the correct ESP32 board and serial port.
+5. Upload the sketch.
+6. Open Serial Monitor.
+
+Expected result:
+
+- ESP32 connects to Wi-Fi.
+- ESP32 connects to AWS IoT using MQTT over TLS.
+- Serial output shows distance readings and successful publishes.
+- A01 updates in DynamoDB and on the S3 dashboard.
+
+
+PHASE 15 - CAPTURE FYP EVIDENCE
+===============================
+
+Capture screenshots after successful tests:
+
+1. Architecture diagram or text architecture.
+2. Terraform apply success and outputs.
+3. AWS IoT Topic Rule and its Lambda target.
+4. Ingestion Lambda configuration.
+5. Dashboard API Lambda configuration.
+6. CloudWatch logs showing successful ingestion.
+7. ParkingSlotState DynamoDB items.
+8. ParkingEvents DynamoDB items.
+9. API Gateway HTTP API routes.
+10. GET /slots response.
+11. S3 static website dashboard.
+12. S3 reports bucket containing a generated CSV.
+13. CSV report contents.
+14. ESP32 Serial Monitor and hardware setup, if hardware is used.
+15. Terraform destroy success.
+
+Do not include AWS access keys, session tokens, private keys, or certificate
+contents in screenshots.
+
+
+PHASE 16 - TROUBLESHOOTING
+==========================
+
+Problem: aws command is not found
+---------------------------------
+
+- Close and reopen the terminal.
+- Confirm AWS CLI v2 is installed.
+- Run aws --version from PowerShell.
+
+
+Problem: terraform command is not found
+---------------------------------------
+
+- Close and reopen the terminal.
+- Confirm Terraform is installed and on PATH.
+- Run terraform version from PowerShell.
+
+
+Problem: Python has no pip
+--------------------------
+
+- Install a normal Python distribution from python.org or winget.
+- Ensure "Add Python to PATH" is enabled.
+- Open a new terminal.
+- Run python -m pip --version.
+
+
+Problem: ExpiredToken or invalid AWS credentials
+------------------------------------------------
+
+- Start or resume the AWS Academy lab.
+- Copy a fresh credentials block.
+- Replace the complete [default] profile in ~/.aws/credentials.
+- Run aws sts get-caller-identity again.
+
+
+Problem: IAM get-role is denied
+-------------------------------
+
+- Use the AWS Console to locate LabRole or VocLabs.
+- Copy its ARN manually.
+- Pass the ARN to Terraform or the deployment script.
+- Do not create a new administrator role.
+
+
+Problem: iam:PassRole is denied
+-------------------------------
+
+- Confirm the selected ARN is exactly the provided LabRole or VocLabs role.
+- Confirm the Lambda resources use that ARN.
+- Record the exact AWS Academy permission error.
+- Do not substitute a custom administrator role.
+
+
+Problem: S3 public website or bucket policy is denied
+-----------------------------------------------------
+
+- Confirm only the dashboard bucket is configured for public object reads.
+- Confirm the reports bucket remains private.
+- Record the exact AccessDenied error.
+- Do not silently claim that local hosting completes the official deployment.
+- Explain that AWS Academy blocked the required S3 website configuration.
+
+
+Problem: IoT Topic Rule creation is denied
+------------------------------------------
+
+- Follow the generated manual console instructions.
+- Continue functional testing using POST /ingest-test.
+- Continue IoT Data Publish testing only if permitted.
+- Clearly state which part was blocked by AWS Academy.
+
+
+Problem: AWS CLI IoT publish fails
+----------------------------------
+
+- Verify credentials and region.
+- Run:
+
+  aws iot describe-endpoint --endpoint-type iot:Data-ATS
+
+- Confirm the script passes the returned endpoint using --endpoint-url.
+- Confirm the topic is smart-parking/slot/SLOT_ID/telemetry.
+
+
+Problem: Lambda reports import errors
+-------------------------------------
+
+- Inspect the Lambda zip files.
+- Ensure app.py and both shared modules are importable.
+- Re-run scripts/package_lambdas.sh.
+- Re-deploy the Lambda packages.
+
+
+Problem: DynamoDB rejects float values
+--------------------------------------
+
+- Confirm all decimal-capable values use Decimal(str(value)).
+- Confirm nested rawPayload numbers are converted recursively.
+- Confirm API responses convert Decimal back to JSON-safe numbers.
+
+
+Problem: Dashboard loads but has no data
+----------------------------------------
+
+- Inspect frontend/config.js in S3.
+- Confirm API_BASE_URL is the deployed API URL.
+- Test curl "$API_URL/health".
+- Check browser developer console for CORS errors.
+- Inspect dashboard API CloudWatch logs.
+
+
+Problem: terraform destroy cannot delete S3 buckets
+---------------------------------------------------
+
+- Use the generated destroy script, which should empty managed buckets first.
+- Never delete unrelated buckets.
+- Manually empty only the dashboard and reports buckets named in Terraform
+  outputs, then retry destroy.
+
+
+PHASE 17 - CLEAN UP AWS RESOURCES
+=================================
+
+Download required evidence and reports before cleanup.
+
+Refresh AWS Academy credentials if necessary:
+
+  aws sts get-caller-identity
+
+Run:
+
+  ./scripts/destroy.sh
+
+Confirm Terraform reports successful destruction.
+
+Verify project resources are gone:
+
+  terraform -chdir=infra/terraform show
+  aws dynamodb list-tables
+  aws lambda list-functions
+  aws iot list-topic-rules
+  aws s3 ls
+
+Inspect results carefully. Do not delete unrelated AWS Academy resources.
+
+If destroy fails because credentials expired:
+
+1. Start or resume the Learner Lab.
+2. Install fresh temporary credentials.
+3. Run aws sts get-caller-identity.
+4. Run ./scripts/destroy.sh again.
+
+
+PHASE 18 - FINAL ACCEPTANCE CHECKLIST
+=====================================
+
+The project is completely created and tested only when every applicable item is
+confirmed:
+
+[ ] AWS CLI, Terraform, Python with pip, Git, and Git Bash work.
+[ ] AWS Academy credentials and region work.
+[ ] LabRole or VocLabs ARN is known.
+[ ] The generated repository contains all specified components.
+[ ] No credentials, certificates, or private keys are committed.
+[ ] All local Python tests pass.
+[ ] Python compile checks pass.
+[ ] Shell syntax checks pass.
+[ ] Terraform validation and plan pass.
+[ ] Terraform deploys the required AWS resources.
+[ ] POST /ingest-test updates DynamoDB.
+[ ] AWS IoT Core publish triggers the ingestion Lambda.
+[ ] CloudWatch logs show successful Lambda invocations.
+[ ] ParkingSlotState contains current state.
+[ ] ParkingEvents contains status-change history.
+[ ] API endpoints return valid JSON and validation errors.
+[ ] Maintenance behavior works.
+[ ] Stale/offline behavior works after more than 60 seconds.
+[ ] Daily CSV report is generated in the private reports bucket.
+[ ] The S3-hosted dashboard loads from the Terraform dashboard_url.
+[ ] Dashboard data and report button work without browser errors.
+[ ] Billing unit tests pass at 5, 15, and 61 minutes.
+[ ] ESP32 publishes over MQTT TLS, if hardware testing is included.
+[ ] FYP screenshots and evidence are captured without secrets.
+[ ] scripts/destroy.sh removes the project resources.
+
+
+RECOMMENDED WORK ORDER SUMMARY
+==============================
+
+Use this order to minimize wasted time and AWS Academy credits:
+
+1. Install AWS CLI, Terraform, and normal Python with pip.
+2. Start AWS Academy and verify temporary credentials.
+3. Generate the repository from fyp.md.
+4. Run all local tests and Terraform validation.
+5. Inspect the Terraform plan.
+6. Deploy to AWS Academy.
+7. Test /ingest-test first.
+8. Test AWS IoT CLI publishing.
+9. Test DynamoDB, API, CloudWatch, reports, and S3 dashboard.
+10. Capture evidence.
+11. Test ESP32 hardware last.
+12. Destroy the AWS resources.
+

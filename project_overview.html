@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Parking IoT Prototype - A Meaningful Cloud Solution</title>
+    <style>
+        :root {
+            --primary: #1F4E79;
+            --secondary: #2E75B6;
+            --accent: #F59E0B;
+            --bg-light: #F8FAFC;
+            --text-dark: #1E293B;
+            --text-muted: #64748B;
+            --border-color: #E2E8F0;
+            --success: #10B981;
+            --shield: #8B5CF6;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text-dark);
+            background-color: var(--bg-light);
+            margin: 0;
+            padding: 0;
+        }
+
+        header {
+            background-color: var(--primary);
+            color: white;
+            padding: 4rem 2rem;
+            text-align: center;
+            border-bottom: 5px solid var(--secondary);
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 2.8rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+
+        header p {
+            margin-top: 1.5rem;
+            font-size: 1.35rem;
+            opacity: 0.95;
+            max-width: 900px;
+            margin-left: auto;
+            margin-right: auto;
+            font-weight: 300;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 3rem auto;
+            padding: 0 2rem;
+        }
+
+        section {
+            background: white;
+            border-radius: 12px;
+            padding: 3rem;
+            margin-bottom: 3rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            border-top: 5px solid var(--secondary);
+        }
+
+        .section-security { border-top-color: var(--shield); }
+        .section-reliability { border-top-color: var(--success); }
+
+        h2 {
+            color: var(--primary);
+            font-size: 2rem;
+            margin-top: 0;
+            margin-bottom: 1.5rem;
+            font-weight: 700;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 1rem;
+        }
+
+        .pillar-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        p {
+            margin-bottom: 1.5rem;
+            font-size: 1.1rem;
+            color: #334155;
+        }
+
+        .highlight-box {
+            background-color: #F1F5F9;
+            border-left: 4px solid var(--secondary);
+            padding: 1.5rem;
+            margin: 2rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .highlight-box strong {
+            color: var(--primary);
+            font-size: 1.2rem;
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .service-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 2rem;
+            margin-top: 2.5rem;
+        }
+
+        .service-card {
+            background: #FFFFFF;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 2rem;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .service-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background-color: var(--secondary);
+        }
+
+        .service-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        .service-card h4 {
+            color: var(--primary);
+            font-size: 1.3rem;
+            margin-top: 0;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .service-card p {
+            font-size: 1rem;
+            color: var(--text-muted);
+            margin-bottom: 0;
+            line-height: 1.7;
+        }
+
+        .architecture-flow {
+            background: #0F172A;
+            color: #38BDF8;
+            padding: 2.5rem;
+            border-radius: 10px;
+            font-family: 'Courier New', Courier, monospace;
+            white-space: pre-wrap;
+            overflow-x: auto;
+            line-height: 1.8;
+            margin-top: 2rem;
+            font-size: 1.1rem;
+            box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06);
+        }
+        
+        ul.custom-list {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        ul.custom-list li {
+            position: relative;
+            padding-left: 2rem;
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+        }
+
+        ul.custom-list li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--success);
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        footer {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-muted);
+            font-size: 1rem;
+            background: white;
+            border-top: 1px solid var(--border-color);
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Smart Parking IoT Prototype</h1>
+        <p>A Meaningful Cloud Solution Architected for Security, Reliability, and Infinite Scale</p>
+    </header>
+
+    <div class="container">
+        
+        <!-- Section 1: The Cloud Vision -->
+        <section>
+            <h2>☁️ Achieving a Meaningful Cloud Solution</h2>
+            <p>
+                Many IoT university projects rely on local servers, direct database connections from microcontrollers, or simple monolithic scripts. This project was built to transcend those limitations by demonstrating a <strong>meaningful, enterprise-grade cloud architecture</strong>. 
+            </p>
+            <p>
+                What makes this solution "meaningful" is its <strong>100% Serverless and Event-Driven</strong> nature. In the physical world, parking events are sporadic—a car arrives, stays for hours, and then leaves. Traditional servers would sit idle for hours, wasting electricity and compute budget. By adopting a serverless cloud architecture (AWS Lambda, API Gateway, DynamoDB), this system fundamentally aligns computing costs with real-world physical events. It scales instantly from zero to thousands of concurrent vehicles processing telemetry, and scales right back to zero, ensuring cost-efficiency and zero server maintenance.
+            </p>
+            <p>
+                Furthermore, the entire cloud infrastructure is defined through <strong>Infrastructure as Code (Terraform)</strong>, proving that the architecture is not a manual, fragile click-through setup, but a robust, version-controlled, and reproducible engineering solution.
+            </p>
+        </section>
+
+        <!-- Section 2: The Two Pillars -->
+        <section class="section-security">
+            <h2 class="pillar-header">🔒 Pillar 1: Security (Defense-in-Depth)</h2>
+            <p>
+                In the context of the <strong>AWS Well-Architected Framework</strong>, the Security pillar focuses on protecting information, systems, and assets. IoT systems are notoriously vulnerable to physical tampering and data injection. This project implements a multi-layered "Defense-in-Depth" strategy:
+            </p>
+            
+            <ul class="custom-list">
+                <li><strong>Encryption in Transit (mTLS):</strong> The physical ESP32 sensors do not use simple passwords. They authenticate to the cloud using <em>Mutual TLS (mTLS)</em> with X.509 device certificates. This means the cloud mathematically verifies the physical identity of the sensor, and the sensor verifies it is talking to the real AWS cloud, preventing Man-in-the-Middle (MitM) attacks.</li>
+                <li><strong>Multi-Layer Input Validation:</strong> Data from the physical world is inherently untrustworthy. Telemetry payloads pass through an IoT SQL topic filter, then undergo strict regex validation, numeric bounds checking (enforcing physical ultrasonic limits), and status whitelisting before ever touching the database.</li>
+                <li><strong>Cross-Site Scripting (XSS) Prevention:</strong> All data fetched from the cloud is aggressively sanitized using HTML entity encoding before being injected into the web dashboard, ensuring that even if malicious data somehow bypassed the backend, it cannot execute in the user's browser.</li>
+            </ul>
+        </section>
+
+        <section class="section-reliability">
+            <h2 class="pillar-header">🔄 Pillar 2: Reliability (Self-Healing)</h2>
+            <p>
+                The Reliability pillar focuses on a system's ability to recover from failures, mitigate disruptions, and meet operational demand. Physical hardware fails, wires get cut, and networks drop. This cloud solution is engineered to <em>expect</em> and gracefully handle these failures.
+            </p>
+
+            <ul class="custom-list">
+                <li><strong>Stale Sensor Detection (Offline Resilience):</strong> The cloud backend does not blindly trust the last known state. Every time the dashboard is loaded, the backend dynamically calculates the time since the last telemetry ping. If a sensor goes silent for more than 60 seconds, the cloud proactively overwrites the frontend display to <code>OFFLINE</code>, preventing drivers from being routed to a "phantom" available bay.</li>
+                <li><strong>Atomic Transactions:</strong> Updating a parking bay's status and logging that event into the historical ledger must happen simultaneously. The system uses DynamoDB <code>TransactWriteItems</code> to ensure that these two distinct database writes succeed or fail together, preventing corrupted or desynced states.</li>
+                <li><strong>Graceful Degradation & Error Isolation:</strong> The architecture prevents cascading failures. If the backend fails to write an event, it catches the error and retries. If a single endpoint fails, it returns a safe HTTP 500 without leaking stack traces. The ESP32 firmware utilizes hardware timeouts to prevent infinite blocking loops and auto-reconnects seamlessly if Wi-Fi or MQTT drops.</li>
+            </ul>
+        </section>
+
+        <!-- Section 3: Services in Depth -->
+        <section>
+            <h2>⚙️ How the AWS Services Execute this Vision</h2>
+            <p>Every AWS service in this architecture was intentionally selected to fulfill the goals of Security, Reliability, and Serverless scalability.</p>
+
+            <div class="architecture-flow">
+[Physical World]            [AWS Cloud Boundary]                   [Data & API Layer]
+                                     
+ ESP32 Hardware ───mTLS──► AWS IoT Core ──Rule──► Lambda Ingest ──Atomic──► DynamoDB Tables
+ (X.509 Auth)              (Message Broker)       (Validation)               (NoSQL)
+                                                                               ▲
+                                                                               │
+ S3 Frontend    ◄──HTTPS── API Gateway  ◄──────── Lambda API    ◄──────────────┘
+ (Static Web)              (REST Routing)         (Business Logic)
+            </div>
+
+            <div class="service-grid">
+                <div class="service-card">
+                    <h4>📡 ESP32 & HC-SR04 (Edge)</h4>
+                    <p>
+                        <strong>The Physical Interface:</strong> Collects raw distance data using ultrasonic waves. Responsible for initiating the secure mTLS handshake and executing self-healing loops to maintain a persistent connection to the cloud, regardless of local network instability.
+                    </p>
+                </div>
+
+                <div class="service-card">
+                    <h4>☁️ AWS IoT Core</h4>
+                    <p>
+                        <strong>The Secure Gateway:</strong> Handles millions of concurrent device connections. It enforces the Security pillar by managing the X.509 certificate lifecycle and restricting devices to specific MQTT topics using IAM IoT Policies.
+                    </p>
+                </div>
+
+                <div class="service-card">
+                    <h4>⚡ Lambda (Ingestion)</h4>
+                    <p>
+                        <strong>The Validation Engine:</strong> Triggered instantly by IoT Core. It serves as the primary enforcement point for Reliability (atomic database writes) and Security (scrubbing and dropping malformed physical telemetry payloads).
+                    </p>
+                </div>
+
+                <div class="service-card">
+                    <h4>🗄️ Amazon DynamoDB</h4>
+                    <p>
+                        <strong>The Serverless Datastore:</strong> Stores real-time state and historical events. Chosen for its single-digit millisecond latency and PAY_PER_REQUEST billing, eliminating the need to provision traditional SQL servers. It provides the foundation for our transactional reliability.
+                    </p>
+                </div>
+
+                <div class="service-card">
+                    <h4>🚪 Amazon API Gateway</h4>
+                    <p>
+                        <strong>The RESTful Router:</strong> Acts as the secure "front door" for web clients. It handles Cross-Origin Resource Sharing (CORS) preflight requests and routes traffic seamlessly to backend logic, absorbing sudden spikes in web traffic effortlessly.
+                    </p>
+                </div>
+
+                <div class="service-card">
+                    <h4>⚡ Lambda (Dashboard API)</h4>
+                    <p>
+                        <strong>The Business Logic:</strong> Translates raw database rows into intelligent JSON responses. It executes the core Reliability feature of "Stale Sensor Detection" on-the-fly, ensuring the public web dashboard only receives highly confident, sanitized data.
+                    </p>
+                </div>
+
+                <div class="service-card">
+                    <h4>🪣 Amazon S3</h4>
+                    <p>
+                        <strong>The Static Host:</strong> Serves the compiled HTML, CSS, and JS frontend globally. Because the frontend contains no server-side logic, hosting it on S3 guarantees 99.999999999% durability and removes the attack vectors associated with traditional web servers (like Apache or Nginx).
+                    </p>
+                </div>
+
+                <div class="service-card">
+                    <h4>🏗️ HashiCorp Terraform</h4>
+                    <p>
+                        <strong>The Foundation:</strong> Infrastructure as Code. It ensures the Reliability of the deployment process itself. By codifying every Lambda, Bucket, and Policy, the system is immune to human configuration errors and serves as living, executable documentation of the cloud architecture.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+    </div>
+    
+    <footer>
+        <p>Universiti Teknikal Malaysia Melaka (UTeM) - PSM 1 Project Documentation</p>
+    </footer>
+
+</body>
+</html>
