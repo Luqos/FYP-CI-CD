@@ -33,3 +33,11 @@ Thumbs.db
 *.log
 .idea/
 .vscode/
+# Local documentation (untracked on GitHub)
+ARCHITECTURE.md
+AWS_ACADEMY_DEPLOYMENT_GUIDE.md
+firmware/esp32_hcsr04_aws_iot/README.md
+fyp.md
+infra/terraform/README.md
+COMPLETE_PROJECT_CREATION_AND_TESTING_GUIDE.txt
+CONTEXT.md
