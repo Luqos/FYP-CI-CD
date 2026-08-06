@@ -1,125 +1,82 @@
-# AWS Academy Smart Parking IoT Prototype
+# AWS Academy Smart Parking IoT Prototype 🚗☁️
 
-A secure, reliable, cloud-native Smart Parking Management System prototype built specifically for deployment inside **AWS Academy Learner Lab** environments.
+> **A Meaningful Cloud Solution Architected for Security, Reliability, and Infinite Scale.**
 
-## Architecture Overview
+This project transcends traditional monolithic university IoT projects. It is a **100% Serverless and Event-Driven** Smart Parking Management System built specifically for deployment inside AWS Academy Learner Lab environments. 
+
+By adopting a cloud-native serverless architecture (AWS Lambda, API Gateway, DynamoDB), this system fundamentally aligns computing costs with real-world physical events. It scales instantly from zero to thousands of concurrent vehicles processing telemetry, ensuring cost-efficiency and zero server maintenance.
+
+---
+
+## 🌟 Key Features & The Two Pillars
+
+Built around the **AWS Well-Architected Framework**:
+
+### 🔒 Pillar 1: Security (Defense-in-Depth)
+- **Encryption in Transit (mTLS):** ESP32 sensors authenticate to the cloud using Mutual TLS (mTLS) with X.509 device certificates.
+- **Multi-Layer Input Validation:** Strict regex and numeric bounds checking drop malformed physical telemetry payloads before they touch the database.
+- **XSS Prevention:** All data fetched from the cloud is aggressively sanitized on the dashboard.
+
+### 🔄 Pillar 2: Reliability (Self-Healing)
+- **Stale Sensor Detection (Offline Resilience):** The cloud proactively overwrites the frontend display to `OFFLINE` if a sensor goes silent for more than 60 seconds.
+- **Atomic Transactions:** Uses DynamoDB `TransactWriteItems` to ensure slot status updates and event ledger logs succeed or fail together.
+- **Graceful Degradation:** Hardware timeouts on the ESP32 prevent infinite blocking loops, auto-reconnecting seamlessly if Wi-Fi or MQTT drops.
+
+---
+
+## 🏗️ Cloud Architecture
 
 ```text
-ESP32 + HC-SR04 ultrasonic sensor / AWS CLI Simulator
-        |
-        | MQTT over TLS (Topic: smart-parking/slot/{slotId}/telemetry)
-        v
-AWS IoT Core (Topic Rule)
-        |
-        v
-AWS Lambda (ingest_sensor_data)
-        |
-        v
-Amazon DynamoDB (ParkingSlotState + ParkingEvents)
-        |
-        v
-Amazon API Gateway HTTP API (dashboard_api Lambda)
-        |
-        v
-Amazon S3 Static Website Hosting (Cloud-hosted Dashboard)
-        |
-        v
-Amazon S3 Private Report Storage + Amazon CloudWatch Logs
+[Physical World]            [AWS Cloud Boundary]                   [Data & API Layer]
+                                     
+ ESP32 Hardware ───mTLS──► AWS IoT Core ──Rule──► Lambda Ingest ──Atomic──► DynamoDB Tables
+ (X.509 Auth)              (Message Broker)       (Validation)               (NoSQL)
+                                                                               ▲
+                                                                               │
+ S3 Frontend    ◄──HTTPS── API Gateway  ◄──────── Lambda API    ◄──────────────┘
+ (Static Web)              (REST Routing)         (Business Logic)
 ```
 
-## Prerequisites
+The entire cloud infrastructure is defined through **Infrastructure as Code (Terraform)**, proving that the architecture is not a manual, fragile click-through setup, but a robust, version-controlled, and reproducible engineering solution. Complete with **GitHub Actions CI/CD pipelines** for automated testing and deployment.
 
-- **AWS CLI** v2
-- **HashiCorp Terraform** >= v1.3
-- **Python** 3.10+
-- **Git Bash** (or PowerShell for Windows execution)
-- **Arduino IDE** (Optional, required only for physical ESP32 flashing)
+---
 
-## Quick Start (Deployment)
+## 🚀 Quick Start (Deployment)
 
 ### 1. Configure AWS Academy Credentials
-Paste temporary Learner Lab credentials into `~/.aws/credentials`:
+Paste your temporary Learner Lab credentials into your terminal:
 ```bash
 aws configure set region us-east-1
 aws sts get-caller-identity
 ```
 
 ### 2. Run Automatic Deployment
-Run either the Bash script (via Git Bash) or PowerShell script:
+The deployment scripts will automatically package Lambdas, apply Terraform, and deploy the React-style dashboard to S3.
 
-**Bash (Git Bash):**
+**Bash (Git Bash / Linux / macOS):**
 ```bash
 chmod +x scripts/*.sh
 ./scripts/deploy.sh
 ```
 
-**PowerShell:**
+**PowerShell (Windows):**
 ```powershell
 .\scripts\deploy.ps1
 ```
 
-The script will automatically detect `LabRole` or `VocLabs`, package Lambda functions, deploy Terraform resources, generate `frontend/config.js`, and upload the static dashboard website to S3.
-
-### 3. Test Telemetry Publishing
-
-Publish test sensor readings via AWS CLI:
+### 3. Test the Live System
+Publish test sensor readings via the AWS CLI to watch the real-time cloud dashboard update:
 ```bash
-# Bash
 ./scripts/publish_sample_aws_cli.sh A01 14.2   # Slot A01 -> OCCUPIED
 ./scripts/publish_sample_aws_cli.sh A01 85.0   # Slot A01 -> AVAILABLE (Calculates billing)
-./scripts/publish_sample_aws_cli.sh A02 999.0  # Slot A02 -> SENSOR_ERROR
-
-# PowerShell
-.\scripts\publish_sample_aws_cli.ps1 A01 14.2
 ```
-
-Or run the full 2-slot automated sequence simulator:
+Or run the fully automated sequence simulator:
 ```bash
 python simulator/publish_sequence_aws_cli.py
 ```
 
-### 4. Access Cloud Dashboard
-
-Open the S3 static website URL printed by the deployment script:
-`http://smart-parking-fyp-dashboard-ACCOUNT-region.s3-website-us-east-1.amazonaws.com`
-
-## Repository Structure
-
-```text
-.
-├── README.md
-├── ARCHITECTURE.md
-├── AWS_ACADEMY_DEPLOYMENT_GUIDE.md
-├── backend/
-│   ├── ingest_sensor_data/
-│   ├── dashboard_api/
-│   └── shared/
-├── frontend/
-├── firmware/
-│   └── esp32_hcsr04_aws_iot/
-├── infra/
-│   └── terraform/
-├── scripts/
-├── simulator/
-└── tests/
-```
-
-## Local Unit Testing
-
-Run Python unit tests before deployment:
-```bash
-python -m venv .venv
-source .venv/Scripts/activate
-pip install -r backend/ingest_sensor_data/requirements.txt
-pip install pytest
-pytest
-```
-
-## Cleanup
-
+### 4. Cleanup
 Destroy all deployed AWS resources to save Learner Lab credits:
 ```bash
 ./scripts/destroy.sh
-# OR
-.\scripts\destroy.ps1
 ```
