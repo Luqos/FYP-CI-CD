@@ -43,10 +43,14 @@ class TestParkingLogic(unittest.TestCase):
         # Max distance boundary: 400 cm -> AVAILABLE
         status, conf, health, dist = validate_and_evaluate_reading(400.0)
         self.assertEqual(status, STATUS_AVAILABLE)
+        
+        # Out of bounds (High distance or timeout -1.0) -> AVAILABLE
+        self.assertEqual(validate_and_evaluate_reading(400.1)[0], STATUS_AVAILABLE)
+        self.assertEqual(validate_and_evaluate_reading(999.0)[0], STATUS_AVAILABLE)
+        self.assertEqual(validate_and_evaluate_reading(-1.0)[0], STATUS_AVAILABLE)
 
-        # Invalid / out of bounds
+        # Invalid / sensor noise (too close)
         self.assertEqual(validate_and_evaluate_reading(1.9)[0], STATUS_SENSOR_ERROR)
-        self.assertEqual(validate_and_evaluate_reading(400.1)[0], STATUS_SENSOR_ERROR)
         self.assertEqual(validate_and_evaluate_reading(None)[0], STATUS_SENSOR_ERROR)
         self.assertEqual(validate_and_evaluate_reading("invalid")[0], STATUS_SENSOR_ERROR)
 

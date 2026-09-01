@@ -45,14 +45,15 @@ def validate_and_evaluate_reading(
     except (ValueError, TypeError):
         return STATUS_SENSOR_ERROR, 0.0, SENSOR_HEALTH_ONLINE, None
 
-    # Check distance range bounds
-    if distance_cm < MIN_DISTANCE_CM or distance_cm > MAX_DISTANCE_CM:
+    # Check for hardware noise / minimum range violation (too close to be real)
+    if 0.0 <= distance_cm < MIN_DISTANCE_CM:
         return STATUS_SENSOR_ERROR, 0.0, SENSOR_HEALTH_ONLINE, None
 
     # Evaluate status based on threshold
-    if distance_cm <= OCCUPIED_THRESHOLD_CM:
+    if MIN_DISTANCE_CM <= distance_cm <= OCCUPIED_THRESHOLD_CM:
         status = STATUS_OCCUPIED
     else:
+        # Distance > 30cm or negative (e.g. -1.0 timeout) means AVAILABLE
         status = STATUS_AVAILABLE
 
     # Calculate or validate confidence

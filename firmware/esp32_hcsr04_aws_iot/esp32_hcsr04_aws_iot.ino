@@ -103,7 +103,7 @@ void publishSlotTelemetry(const char* slotId, const char* topic, int trigPin, in
     doc["status"] = (distanceCm <= 30.0) ? "OCCUPIED" : "AVAILABLE";
   } else {
     doc["distanceCm"] = -1;
-    doc["status"] = "SENSOR_ERROR";
+    doc["status"] = "AVAILABLE"; // Timeout means no object in range
   }
   doc["deviceId"] = "esp32-dual-sensor";
   doc["firmwareVersion"] = "1.1.0";
