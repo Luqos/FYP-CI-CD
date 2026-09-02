@@ -5,7 +5,7 @@ resource "aws_lambda_function" "ingest_sensor_data" {
   handler       = "app.lambda_handler"
   runtime       = "python3.11"
   timeout       = 15
-  memory_size   = 128
+  memory_size   = 512
 
   filename         = "${path.module}/../../build/ingest_sensor_data.zip"
   source_code_hash = fileexists("${path.module}/../../build/ingest_sensor_data.zip") ? filebase64sha256("${path.module}/../../build/ingest_sensor_data.zip") : null
@@ -31,7 +31,7 @@ resource "aws_lambda_function" "dashboard_api" {
   handler       = "app.lambda_handler"
   runtime       = "python3.11"
   timeout       = 30
-  memory_size   = 128
+  memory_size   = 512
 
   filename         = "${path.module}/../../build/dashboard_api.zip"
   source_code_hash = fileexists("${path.module}/../../build/dashboard_api.zip") ? filebase64sha256("${path.module}/../../build/dashboard_api.zip") : null
