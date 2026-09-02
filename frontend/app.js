@@ -134,7 +134,7 @@
     totalSlotsEl.textContent = summary.total !== undefined ? summary.total : slots.length;
     availableSlotsEl.textContent = summary.available || 0;
     occupiedSlotsEl.textContent = summary.occupied || 0;
-    offlineErrorSlotsEl.textContent = (summary.offline || 0) + (summary.sensorError || 0);
+    offlineErrorSlotsEl.textContent = (summary.offline || 0) + (summary.sensorError || 0) + (summary.maintenance || 0);
 
     if (slots.length === 0) {
       slotsGridEl.innerHTML = `

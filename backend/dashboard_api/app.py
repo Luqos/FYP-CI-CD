@@ -209,7 +209,9 @@ def get_all_slots() -> dict:
 
         is_stale = is_reading_stale(last_seen, now_epoch)
         sensor_health = "OFFLINE" if is_stale else native_item.get("sensorHealth", "ONLINE")
-        effective_status = STATUS_OFFLINE if is_stale else persisted_status
+        
+        # EV1 Reliability Rule: Stale heartbeat fails over to MAINTENANCE mode
+        effective_status = STATUS_MAINTENANCE if is_stale else persisted_status
 
         slot_record = {
             "slotId": slot_id,
@@ -274,7 +276,10 @@ def get_single_slot(slot_id: str) -> dict:
     last_seen = native_item.get("lastSeenEpoch", 0)
 
     is_stale = is_reading_stale(last_seen, now_epoch)
-    effective_status = STATUS_OFFLINE if is_stale else native_item.get("status")
+    
+    # EV1 Reliability Rule: Stale heartbeat fails over to MAINTENANCE mode
+    effective_status = STATUS_MAINTENANCE if is_stale else native_item.get("status")
+
 
     native_item["isStale"] = is_stale
     native_item["effectiveStatus"] = effective_status
