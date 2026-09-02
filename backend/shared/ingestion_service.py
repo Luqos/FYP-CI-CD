@@ -271,9 +271,13 @@ def set_admin_slot_mode(
         "status": target_status,
         "distanceCm": existing_item.get("distanceCm", Decimal("-1")),
         "confidence": existing_item.get("confidence", Decimal("1.0")),
-        "lastSeenEpoch": current_epoch,
-        "lastSeenIso": now_iso,
-        "sensorHealth": "ONLINE",
+        
+        # CRITICAL BUG FIX: Do not overwrite telemetry timestamps during admin override.
+        # This ensures that if the physical sensor is dead, the heartbeat remains stale.
+        "lastSeenEpoch": existing_item.get("lastSeenEpoch", current_epoch),
+        "lastSeenIso": existing_item.get("lastSeenIso", now_iso),
+        "sensorHealth": existing_item.get("sensorHealth", "ONLINE"),
+        
         "updatedBy": "admin_override",
     }
 
