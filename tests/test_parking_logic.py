@@ -20,6 +20,7 @@ from backend.shared.parking_logic import (
     STATUS_AVAILABLE,
     STATUS_OCCUPIED,
     STATUS_SENSOR_ERROR,
+    STALE_AFTER_SECONDS,
 )
 
 
@@ -95,8 +96,10 @@ class TestParkingLogic(unittest.TestCase):
 
     def test_stale_reading_detection(self):
         current_epoch = 1000
-        self.assertFalse(is_reading_stale(950, current_epoch))  # 50s old -> not stale
-        self.assertTrue(is_reading_stale(930, current_epoch))   # 70s old -> stale (>60s)
+        # Reading within threshold -> not stale
+        self.assertFalse(is_reading_stale(current_epoch - (STALE_AFTER_SECONDS // 2), current_epoch))
+        # Reading exceeding threshold -> stale
+        self.assertTrue(is_reading_stale(current_epoch - (STALE_AFTER_SECONDS + 5), current_epoch))
 
     def test_dynamodb_decimal_conversions(self):
         payload = {
