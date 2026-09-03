@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional, Tuple
 MIN_DISTANCE_CM: float = 2.0
 MAX_DISTANCE_CM: float = 400.0
 OCCUPIED_THRESHOLD_CM: float = 30.0
-STALE_AFTER_SECONDS: int = 60
+STALE_AFTER_SECONDS: int = 10  # Presentation demo: reduced from 60s for live viva
 GRACE_PERIOD_MINUTES: int = 10
 HOURLY_RATE_RM: float = 2.00
 
